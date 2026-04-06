@@ -56,12 +56,11 @@ cag_core/
 
 ## Quickstart
 
-```python
 from cag_core import CAGCore, SignalInput
 
 core = CAGCore()
 
-result = core.update(
+inp = SignalInput(
     cognitive_signal=0.72,
     action_signal=0.44,
     timestamp="2026-04-06T16:00:00+09:00",
@@ -70,10 +69,7 @@ result = core.update(
     confidence=0.85
 )
 
-print(result.phase_label)   # "COG_LEAD"
-print(result.cag_value)     # 0.28
-print(result.verdict)       # "WAIT"
-```
+result = core.update(inp)
 
 ---
 
