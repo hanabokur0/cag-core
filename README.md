@@ -56,6 +56,7 @@ cag_core/
 
 ## Quickstart
 
+```python
 from cag_core import CAGCore, SignalInput
 
 core = CAGCore()
@@ -70,6 +71,11 @@ inp = SignalInput(
 )
 
 result = core.update(inp)
+
+print(result.phase_label)   # "COG_LEAD"
+print(result.cag_value)     # 0.28
+print(result.verdict)       # "WAIT"
+```
 
 ---
 
