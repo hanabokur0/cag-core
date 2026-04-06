@@ -1,0 +1,163 @@
+# Normalizer I/O 仕様
+## LoPAS-SEED v1.20
+
+---
+
+## 原則
+
+Normalizerは**差し替え可能な前処理レイヤー**。  
+CAG Coreは入力の出所を知らない。Normalizerが「0〜1のスコア」に変換する責任を持つ。
+
+```
+raw_signals → [Normalizer] → normalized [0,1] → CAG Core
+```
+
+**Coreが不変でいられるのは、Normalizerがこのインターフェースを守る限り**。
+
+---
+
+## 入力インターフェース（raw）
+
+```json
+{
+  "source":    "x",
+  "raw_value": 1234,
+  "context":   {}
+}
+```
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `source` | string | データソース識別子（x / keepa / reddit / custom） |
+| `raw_value` | number or object | 生データ（単一値 or 構造体） |
+| `context` | object | ソース固有の補助情報（任意） |
+
+---
+
+## 出力インターフェース（固定）
+
+```json
+{
+  "normalized_score": 0.72,
+  "confidence":       0.85,
+  "noise_flag":       false
+}
+```
+
+| フィールド | 型 | 制約 | 説明 |
+|-----------|-----|------|------|
+| `normalized_score` | float | **[0.0, 1.0] 必須** | CAG Coreへ渡すスコア |
+| `confidence` | float | [0.0, 1.0] 必須 | スコアの信頼度 |
+| `noise_flag` | bool | 必須 | ノイズ過多の場合 `true` |
+
+---
+
+## ルール（3つだけ固定）
+
+### ① 出力は必ず 0〜1
+
+CAG = C − A の計算に使うため、スケールを統一する。  
+範囲外の値はCoreに渡す前に必ずクリップする。
+
+### ② confidence を必須にする
+
+SNSはノイズが多く、confidence が低いシグナルは  
+CAGの計算時に重みを下げる（またはスキップする）ために使う。
+
+```python
+# Core側での利用例
+if inp.confidence < 0.5:
+    logger.warning(f"Low confidence signal from {inp.source}: {inp.confidence}")
+```
+
+### ③ noise_flag を持つ
+
+LoPAS設計思想に基づき、「測定不能」「意味なし」の状態を  
+スコアゼロではなくフラグで表現する。  
+ゼロとノイズは違う。
+
+---
+
+## ソース別 実装指針（参考：実装は自由）
+
+### SNS（X / Reddit）
+
+```
+score = sigmoid(z_score(投稿頻度加速度))
+confidence = 投稿数 > threshold ? 0.8 : 0.4
+noise_flag = 感情摩擦ワード比率 > 0.3
+```
+
+- 投稿数が少ない場合は confidence を下げる
+- 炎上・感情ノイズは noise_flag で除外
+- z-score + sigmoid で安定化
+
+### Keepa（EC価格・在庫）
+
+```
+score = min_max_scale(価格変動率, 在庫減少率)
+confidence = データ点数 >= 30 ? 0.95 : 0.6
+noise_flag = 異常値検出（IQR法など）
+```
+
+- 物理値（価格・在庫）は min-max scaling が安定
+- データ点数が少ない場合は confidence を下げる
+- スパイク除外のため異常値フラグを持つ
+
+### 地政学（カスタム）
+
+```
+score = 専門家スコア or sentiment_score
+confidence = ソース信頼性評価
+noise_flag = 発表なし / 不確定情報
+```
+
+---
+
+## 差し替え例
+
+```python
+class KeepaCAGNormalizer:
+    """Keepa向けNormalizer実装例"""
+
+    def normalize(self, raw: dict) -> dict:
+        price_change = raw["price_change_rate"]
+        stock_drop   = raw["stock_drop_rate"]
+        n = (price_change + stock_drop) / 2  # min-maxは省略
+        n = max(0.0, min(1.0, n))
+        return {
+            "normalized_score": n,
+            "confidence": 0.9 if raw.get("data_points", 0) >= 30 else 0.6,
+            "noise_flag": abs(price_change) > 0.8,
+        }
+
+
+class XNormalizer:
+    """X（Twitter）向けNormalizer実装例"""
+
+    def normalize(self, raw: dict) -> dict:
+        freq = raw.get("post_freq_acceleration", 0)
+        z    = (freq - self._mean) / (self._std + 1e-8)
+        score = 1 / (1 + math.exp(-z))
+        return {
+            "normalized_score": score,
+            "confidence": 0.8 if raw.get("post_count", 0) > 100 else 0.4,
+            "noise_flag": raw.get("friction_ratio", 0) > 0.3,
+        }
+```
+
+---
+
+## アーキテクチャ上の位置
+
+```
+raw_signals
+  ↓
+[KeepaCAGNormalizer]  ←─ 差し替え可能
+[XNormalizer]         ←─ 差し替え可能
+  ↓
+CAG Core（不変）
+```
+
+Normalizerを差し替えても、CAG Coreのロジックは一切変更しない。  
+これがCAGを「環境非依存」にする設計の核心。
