@@ -1,0 +1,156 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CAG Core Schema",
+  "description": "LoPAS-SEED v1.20 — Cognitive-Action Gap Core I/O仕様",
+  "version": "1.20",
+
+  "definitions": {
+
+    "NormalizedSignal": {
+      "description": "Normalizerが出力する正規化済みシグナル（CAG Coreへの入力）",
+      "type": "object",
+      "required": ["source", "normalized_score", "confidence"],
+      "properties": {
+        "source":           { "type": "string", "description": "データソース識別子（例: x, keepa, reddit）" },
+        "normalized_score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "confidence":       { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "noise_flag":       { "type": "boolean", "default": false },
+        "raw_context":      { "type": "object", "description": "デバッグ用の生データ参照（任意）" }
+      },
+      "additionalProperties": false
+    },
+
+    "CAGInput": {
+      "description": "CAG Core への入力",
+      "type": "object",
+      "required": ["timestamp", "market", "source", "cognitive_signal", "action_signal"],
+      "properties": {
+        "timestamp":         { "type": "string", "format": "date-time" },
+        "market":            { "type": "string", "description": "市場識別子（例: ec, geopolitics, municipality）" },
+        "source":            { "type": "string", "description": "複合ソース名（例: x_keepa）" },
+        "cognitive_signal":  { "type": "number", "minimum": 0.0, "maximum": 1.0, "description": "認知層スコア（Normalizerが出力）" },
+        "action_signal":     { "type": "number", "minimum": 0.0, "maximum": 1.0, "description": "行動層スコア（Normalizerが出力）" },
+        "confidence":        { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 1.0 }
+      },
+      "additionalProperties": false
+    },
+
+    "PhaseLabel": {
+      "type": "string",
+      "enum": ["COG_LEAD", "SYNC", "ACT_LEAD"],
+      "description": "COG_LEAD: 認知先行 / SYNC: 同期 / ACT_LEAD: 行動先行（GOシグナル）"
+    },
+
+    "Verdict": {
+      "type": "string",
+      "enum": ["GO", "WAIT", "STOP"]
+    },
+
+    "TrendLabel": {
+      "type": "string",
+      "enum": ["WIDENING", "STABLE", "CONVERGING"],
+      "description": "WIDENING: ギャップ拡大 / CONVERGING: 収束中"
+    },
+
+    "CAGOutput": {
+      "description": "CAG Core の出力（Wave Extensionへの入力でもある）",
+      "type": "object",
+      "required": ["timestamp", "market", "source", "cag_value", "delta_cag", "delta2_cag", "phase_label", "verdict", "confidence"],
+      "properties": {
+        "timestamp":   { "type": "string", "format": "date-time" },
+        "market":      { "type": "string" },
+        "source":      { "type": "string" },
+        "cag_value":   { "type": "number", "description": "CAG = Cognition − Action（EMA安定化後）" },
+        "delta_cag":   { "type": "number", "description": "Δ(cag_value)：変化速度" },
+        "delta2_cag":  { "type": "number", "description": "Δ²(cag_value)：加速度" },
+        "phase_label": { "$ref": "#/definitions/PhaseLabel" },
+        "verdict":     { "$ref": "#/definitions/Verdict" },
+        "confidence":  { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "trend":       { "oneOf": [{ "$ref": "#/definitions/TrendLabel" }, { "type": "null" }] },
+        "zero_cross":  { "type": "boolean", "description": "今回ステップでゼロクロスしたか" }
+      },
+      "additionalProperties": false
+    },
+
+    "WaveExtensionOutput": {
+      "description": "Wave Extension（外付けモジュール）の出力インターフェース",
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "dominant_cycles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["band", "period", "strength"],
+            "properties": {
+              "band":     { "type": "string", "enum": ["short", "mid", "long"] },
+              "period":   { "type": "number", "description": "周期（データポイント数）" },
+              "strength": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+            }
+          }
+        },
+        "phase_shift":    { "type": "number" },
+        "amplitude_gap":  { "type": "number" },
+        "resonance_flag": { "type": "boolean" }
+      }
+    },
+
+    "InterferenceOutput": {
+      "description": "Interference Engine（外付けモジュール）の出力インターフェース",
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled":            { "type": "boolean" },
+        "target_market":      { "type": "string" },
+        "lag_estimate":       { "type": "number", "description": "推定ラグ（データポイント数）" },
+        "alignment_score":    { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "propagation_score":  { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "interference_type":  { "type": "string", "enum": ["constructive", "destructive", "neutral"] }
+      }
+    }
+
+  },
+
+  "examples": {
+    "input": {
+      "timestamp": "2026-04-06T16:00:00+09:00",
+      "market": "ec",
+      "source": "x_keepa",
+      "cognitive_signal": 0.72,
+      "action_signal": 0.44,
+      "confidence": 0.85
+    },
+    "output_core": {
+      "timestamp": "2026-04-06T16:00:00+09:00",
+      "market": "ec",
+      "source": "x_keepa",
+      "cag_value": 0.28,
+      "delta_cag": 0.09,
+      "delta2_cag": 0.03,
+      "phase_label": "COG_LEAD",
+      "verdict": "WAIT",
+      "confidence": 0.85,
+      "trend": "WIDENING",
+      "zero_cross": false
+    },
+    "output_wave": {
+      "enabled": true,
+      "dominant_cycles": [
+        { "band": "short", "period": 3, "strength": 0.71 },
+        { "band": "mid",   "period": 9, "strength": 0.56 }
+      ],
+      "phase_shift": 0.42,
+      "amplitude_gap": 0.18,
+      "resonance_flag": false
+    },
+    "output_interference": {
+      "enabled": true,
+      "target_market": "ads",
+      "lag_estimate": 2,
+      "alignment_score": 0.68,
+      "propagation_score": 0.61,
+      "interference_type": "constructive"
+    }
+  }
+}
