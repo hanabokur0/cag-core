@@ -102,6 +102,14 @@ LoPAS-SEED v1.15 に基づく。
 CAGはこの2層の位相差を連続的に観測する装置である。
 
 ---
+追加セクション：
+
+Information Allocation Interpretation (NEW)
+GO    -> Priority
+WAIT  -> Normal
+STOP  -> Hold
+
+CAG Core can be interpreted as a threshold-based Information Allocation Device (IAD).
 
 ## Related
 
