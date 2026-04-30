@@ -3,7 +3,7 @@
 CAG (in this repository) = Cognitive-Action Gap
 Not Cache-Augmented Generation.
 
-> **LoPAS-SEED v1.15 → v1.20**  
+> 　LoPAS-SEED v1.15 → v1.20
 > カーネル化リリース：Core / Normalizer / Wave（外付け）の3層分離
 
 ---
